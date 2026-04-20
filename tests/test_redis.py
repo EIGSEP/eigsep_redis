@@ -483,6 +483,36 @@ def test_is_alive(server, client):
     assert server.heartbeat_reader.check() is False
 
 
+def test_named_heartbeats_are_isolated(server, client):
+    """Multiple named heartbeats on the same transport must not
+    collide. Default ``name="client"`` coexists with per-device names
+    (e.g. ``pico:motor``) because each one writes to its own
+    ``heartbeat:{name}`` key.
+    """
+    motor_w = HeartbeatWriter(client.transport, name="pico:motor")
+    motor_r = HeartbeatReader(server.transport, name="pico:motor")
+    imu_w = HeartbeatWriter(client.transport, name="pico:imu_el")
+    imu_r = HeartbeatReader(server.transport, name="pico:imu_el")
+
+    assert motor_w.key == "heartbeat:pico:motor"
+    assert motor_r.key == "heartbeat:pico:motor"
+
+    motor_w.set(ex=100, alive=True)
+    assert motor_r.check() is True
+    # Default-named reader must not see the per-device heartbeat
+    assert server.heartbeat_reader.check() is False
+    # IMU heartbeat is independent of motor's
+    assert imu_r.check() is False
+
+    imu_w.set(ex=100, alive=True)
+    assert motor_r.check() is True
+    assert imu_r.check() is True
+
+    motor_w.set(ex=100, alive=False)
+    assert motor_r.check() is False
+    assert imu_r.check() is True
+
+
 def test_status(server, client):
     assert client.status_reader.stream == {"stream:status": "$"}
 
