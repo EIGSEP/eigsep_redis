@@ -1,5 +1,4 @@
 from .config import ConfigStore
-from .eig_redis import EigsepRedis
 from .heartbeat import HeartbeatReader, HeartbeatWriter
 from .metadata import (
     MetadataSnapshotReader,
@@ -11,7 +10,6 @@ from .transport import Transport
 
 __all__ = [
     "ConfigStore",
-    "EigsepRedis",
     "HeartbeatReader",
     "HeartbeatWriter",
     "MetadataSnapshotReader",
