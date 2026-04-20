@@ -25,7 +25,7 @@ from eigsep_redis import (
     StatusWriter,
 )
 from eigsep_redis.keys import METADATA_HASH
-from eigsep_redis.testing import DummyEigsepRedis, DummyTransport
+from eigsep_redis.testing import DummyTransport
 
 
 class _BusBundle:
@@ -405,7 +405,6 @@ def test_eigsep_redis_bus_classes_have_no_cross_bus_methods():
     where those classes are defined.
     """
     cross_bus_methods = (
-        "add_metadata",
         "get_live_metadata",
         "get_metadata",
         "add_corr_data",
@@ -441,20 +440,6 @@ def test_eigsep_redis_bus_classes_have_no_cross_bus_methods():
             assert not hasattr(cls, forbidden), (
                 f"{cls.__name__} should not expose {forbidden!r}"
             )
-
-
-def test_add_metadata_shim_emits_deprecation_warning():
-    """The picohost shim must be loud — it should disappear once
-    picohost migrates to MetadataWriter.add.
-
-    Constructs ``DummyEigsepRedis`` directly because the shim lives
-    on that class, not on the per-bus writer surfaces.
-    """
-    shim = DummyEigsepRedis()
-    with pytest.warns(DeprecationWarning, match="redis.metadata.add"):
-        shim.add_metadata("via_shim", 42)
-    snapshot = MetadataSnapshotReader(shim.transport)
-    assert snapshot.get("via_shim") == 42
 
 
 def test_metadata_drain_skips_producer_backlog(server, client):
