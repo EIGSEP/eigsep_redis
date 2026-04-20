@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.0.0](https://github.com/EIGSEP/eigsep_redis/compare/v1.0.0...v2.0.0) (2026-04-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove EigsepRedis add_metadata shim
+* parameterize HeartbeatWriter/Reader with name=
+
+### Features
+
+* parameterize HeartbeatWriter/Reader with name= ([f1c1958](https://github.com/EIGSEP/eigsep_redis/commit/f1c1958c7c953eff2e1f5eefd397b7bf9b1ae5e8))
+
+
+### Documentation
+
+* add claude.md ([322d6cc](https://github.com/EIGSEP/eigsep_redis/commit/322d6ccd9742d827a765248ed7695f79e1dd0f4e))
+
+
+### Code Refactoring
+
+* remove EigsepRedis add_metadata shim ([ad8d1d8](https://github.com/EIGSEP/eigsep_redis/commit/ad8d1d88e9b3077590c897cf96df9addcc87fdad))
+
 ## [1.0.0](https://github.com/EIGSEP/eigsep_redis/compare/v0.1.0...v1.0.0) (2026-04-20)
 
 
