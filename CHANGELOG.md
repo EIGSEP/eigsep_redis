@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.0.0...v3.0.0) (2026-04-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename Transport._upload_dict to upload_dict
+
+### Code Refactoring
+
+* rename Transport._upload_dict to upload_dict ([86ec362](https://github.com/EIGSEP/eigsep_redis/commit/86ec3627c6665dbd90d8d15140f129388acc32f5))
+
 ## [2.0.0](https://github.com/EIGSEP/eigsep_redis/compare/v1.0.0...v2.0.0) (2026-04-20)
 
 

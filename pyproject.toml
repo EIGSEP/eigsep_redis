@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eigsep_redis"
-version = "2.0.0"
+version = "3.0.0"
 description = "Redis transport and bus surfaces for the EIGSEP experiment."
 readme = "README.md"
 license = {text = "MIT"}
