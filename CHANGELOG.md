@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.0.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.0.0...v3.0.0) (2026-04-20)
+## [2.1.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.0.0...v2.1.0) (2026-04-20)
 
 
 ### ⚠ BREAKING CHANGES
