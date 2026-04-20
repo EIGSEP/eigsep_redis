@@ -12,10 +12,9 @@ class EigsepRedis:
 
     In-tree consumers build their own per-bus surfaces from a
     :class:`Transport` directly. This class exists solely so picohost
-    (still out-of-tree) can keep calling ``redis.add_metadata(...)``
-    until it migrates to ``MetadataWriter.add``. It will be retired in
-    a follow-up PR once that migration lands — see
-    ``TODO(monorepo)`` below.
+    can keep calling ``redis.add_metadata(...)`` until it migrates to
+    ``MetadataWriter.add``. It will be retired in a follow-up PR once
+    that migration lands — see ``TODO(picohost-migration)`` below.
     """
 
     transport_cls = Transport
@@ -36,13 +35,13 @@ class EigsepRedis:
     def add_metadata(self, key, value):
         """Deprecated shim. Use ``redis.metadata.add(key, value)``.
 
-        TODO(monorepo): delete this class once picohost migrates to
-        ``MetadataWriter.add``.
+        TODO(picohost-migration): delete this class once picohost
+        migrates to ``MetadataWriter.add``.
         """
         warnings.warn(
             "EigsepRedis.add_metadata is deprecated; use "
             "redis.metadata.add(key, value). This shim will be removed "
-            "once picohost joins the monorepo.",
+            "once picohost migrates to MetadataWriter.add.",
             DeprecationWarning,
             stacklevel=2,
         )
