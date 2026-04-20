@@ -28,7 +28,7 @@ class ConfigStore:
         ----------
         config : dict
         """
-        self.transport._upload_dict(config, CONFIG_KEY)
+        self.transport.upload_dict(config, CONFIG_KEY)
 
     def get(self):
         """

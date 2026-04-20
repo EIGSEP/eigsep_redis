@@ -96,7 +96,7 @@ class Transport:
     def get_raw(self, key):
         return self.r.get(key)
 
-    def _upload_dict(self, d, key):
+    def upload_dict(self, d, key):
         """Serialize ``d`` as JSON (with ``upload_time`` injected) under ``key``."""
         d = d.copy()
         d["upload_time"] = time.time()
