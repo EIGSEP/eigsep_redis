@@ -1,5 +1,7 @@
 # eigsep_redis
 
+[![codecov](https://codecov.io/gh/EIGSEP/eigsep_redis/graph/badge.svg?token=0R91PKYCCL)](https://codecov.io/gh/EIGSEP/eigsep_redis)
+
 Redis transport and bus surfaces for the
 [EIGSEP](https://github.com/EIGSEP) radio astronomy experiment.
 
