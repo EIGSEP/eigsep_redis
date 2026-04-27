@@ -21,10 +21,11 @@ class Transport:
     for testing).
     """
 
-    def __init__(self, host="localhost", port=6379):
+    def __init__(self, host="localhost", port=6379, connect_timeout=5.0):
         self.logger = logger
         self.host = host
         self.port = port
+        self.connect_timeout = connect_timeout
         self._stream_lock = threading.RLock()
         self._last_read_ids = {}
         self.r = self._make_redis(host, port)
@@ -36,7 +37,7 @@ class Transport:
                 port=port,
                 decode_responses=False,
                 socket_timeout=None,
-                socket_connect_timeout=None,
+                socket_connect_timeout=self.connect_timeout,
                 retry_on_timeout=False,
             )
             r.ping()

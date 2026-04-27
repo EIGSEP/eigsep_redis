@@ -324,6 +324,33 @@ def test_raw(server):
     assert server.get_raw("data:foo") == payload
 
 
+def test_transport_passes_connect_timeout_to_redis(monkeypatch):
+    """Transport must give the redis client a finite ``socket_connect_timeout``
+    so the initial ``ping()`` fails fast on an unreachable host instead of
+    blocking on the OS-level TCP timeout (~2 min on Linux).
+
+    ``socket_timeout`` must stay ``None`` so blocking reads (``XREAD BLOCK``,
+    used by every stream reader) don't spuriously time out.
+    """
+    from eigsep_redis.transport import Transport
+
+    captured = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def ping(self):
+            return True
+
+    monkeypatch.setattr("eigsep_redis.transport.redis.Redis", _FakeClient)
+
+    Transport(host="example.invalid", port=6379, connect_timeout=2.5)
+
+    assert captured["socket_connect_timeout"] == 2.5
+    assert captured["socket_timeout"] is None
+
+
 def test_metadata_writer_has_no_cross_bus_methods():
     """Structural guard: the metadata writer surface must not expose any
     method or attribute that could be used to write a corr or VNA payload.
