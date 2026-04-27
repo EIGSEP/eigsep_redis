@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/EIGSEP/eigsep_redis/compare/v2.1.0...v2.1.1) (2026-04-27)
+
+
+### Bug Fixes
+
+* **transport:** set finite socket_connect_timeout so wrong-network connects fail fast ([f40c79c](https://github.com/EIGSEP/eigsep_redis/commit/f40c79cba47d66ec46c682a1bfd3a470afbc6dac))
+
 ## [2.1.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.0.0...v2.1.0) (2026-04-20)
 
 
