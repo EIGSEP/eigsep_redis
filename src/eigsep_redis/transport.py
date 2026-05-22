@@ -57,9 +57,14 @@ class Transport:
             if stream in self._last_read_ids:
                 return self._last_read_ids[stream]
             try:
-                return self.r.xinfo_stream(stream)["last-generated-id"]
+                last_id = self.r.xinfo_stream(stream)["last-generated-id"]
             except redis.exceptions.ResponseError:
+                # Stream doesn't exist yet; "$" is a per-call xread
+                # sentinel ("tail at call time"), not a stable ID, so
+                # leave the cache empty until a real ID materializes.
                 return "$"
+            self._last_read_ids[stream] = last_id
+            return last_id
 
     def _set_last_read_id(self, stream, read_id):
         with self._stream_lock:
@@ -80,9 +85,14 @@ class Transport:
                     d[key] = self._last_read_ids[key]
                     continue
                 try:
-                    d[key] = self.r.xinfo_stream(key)["last-generated-id"]
+                    last_id = self.r.xinfo_stream(key)["last-generated-id"]
                 except redis.exceptions.ResponseError:
+                    # See _get_last_read_id: "$" is a sentinel, not a
+                    # cacheable ID — leave the cache empty.
                     d[key] = "$"
+                    continue
+                d[key] = last_id
+                self._last_read_ids[key] = last_id
             return d
 
     def reset(self):
