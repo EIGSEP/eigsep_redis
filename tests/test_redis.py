@@ -58,8 +58,8 @@ class _BusBundle:
     def reset(self):
         return self.transport.reset()
 
-    def _set_last_read_id(self, stream, read_id):
-        return self.transport._set_last_read_id(stream, read_id)
+    def set_last_read_id(self, stream, read_id):
+        return self.transport.set_last_read_id(stream, read_id)
 
     def add_raw(self, key, value, ex=None):
         return self.transport.add_raw(key, value, ex=ex)
@@ -264,7 +264,7 @@ def test_metadata_stream_with_entries_skips_check(server, client, caplog):
     writer restamps ``_ts`` on every add — but cheap to assert)
     must not warn."""
     client.metadata.add("acc_cnt", 1)
-    server._set_last_read_id("stream:acc_cnt", "0-0")
+    server.set_last_read_id("stream:acc_cnt", "0-0")
     _backdate_ts(server, "acc_cnt", seconds_ago=120)
     with caplog.at_level(logging.WARNING, logger="eigsep_redis.metadata"):
         out = server.metadata_stream.drain()
@@ -456,9 +456,16 @@ def test_eigsep_redis_bus_classes_have_no_cross_bus_methods():
         "client_heartbeat_set",
         "client_heartbeat_check",
     )
+    # Status* are now SingleStreamReader/SingleStreamWriter subclasses.
+    # ``vars(cls)`` only enumerates names defined on the subclass
+    # itself (not inherited), so the expected sets here are the
+    # bus-specific knobs each Status class adds on top of the base.
+    # Inherited methods (``read``, ``publish``) still work; this guard
+    # exists to catch cross-bus methods being added to a class, not
+    # to assert the inheritance surface.
     surfaces = {
-        StatusWriter: {"send", "maxlen"},
-        StatusReader: {"read", "stream"},
+        StatusWriter: {"send", "maxlen", "stream", "data_set"},
+        StatusReader: {"stream", "data_set"},
         HeartbeatWriter: {"set"},
         HeartbeatReader: {"check"},
         ConfigStore: {"upload", "get"},
@@ -551,7 +558,14 @@ def test_named_heartbeats_are_isolated(server, client):
 
 
 def test_status(server, client):
-    assert client.status_reader.stream == {"stream:status": "$"}
+    # StatusReader.stream is the stream name (str) inherited from
+    # SingleStreamReader; an unread, never-existed status stream has
+    # no cached cursor, so the transport falls back to the "$"
+    # sentinel (newest-after-call).
+    assert client.status_reader.stream == "stream:status"
+    assert (
+        client.transport.get_last_read_id(client.status_reader.stream) == "$"
+    )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         read_future = executor.submit(server.status_reader.read)
@@ -585,7 +599,7 @@ def test_status(server, client):
 
 def test_status_read_catches_entries_after_empty_read(server, client):
     """Regression for the symmetric cursor-cache bug in
-    ``Transport._get_last_read_id``: an empty (timeout) read on a
+    ``Transport.get_last_read_id``: an empty (timeout) read on a
     stream that already has entries must seed the cursor, so the next
     read picks up entries the producer publishes between calls
     instead of re-seeking to the new tail and dropping them.
@@ -621,7 +635,7 @@ def test_metadata_drain_with_ids_returns_tuples(server, client):
     # under test. (Mirrors how the corr-loop side ends up positioned
     # once it has consumed at least one entry.)
     client.metadata.add("acc_cnt", 0)
-    server.transport._set_last_read_id("stream:acc_cnt", "0-0")
+    server.transport.set_last_read_id("stream:acc_cnt", "0-0")
     client.metadata.add("acc_cnt", 1)
 
     result = server.metadata_stream.drain(with_ids=True)
@@ -649,7 +663,7 @@ def test_metadata_skip_to_latest_advances_past_backlog(server, client):
     # Anchor the reader at the start so we can verify entry 0 is
     # consumed normally before the simulated blip.
     client.metadata.add("acc_cnt", 0)
-    server.transport._set_last_read_id("stream:acc_cnt", "0-0")
+    server.transport.set_last_read_id("stream:acc_cnt", "0-0")
     assert server.metadata_stream.drain() == {"stream:acc_cnt": [0]}
 
     # producer keeps publishing during the simulated outage
@@ -670,8 +684,8 @@ def test_metadata_skip_to_latest_defaults_to_registered_streams(
     advances every registered stream."""
     client.metadata.add("acc_cnt", 0)
     client.metadata.add("temp", 25.0)
-    server.transport._set_last_read_id("stream:acc_cnt", "0-0")
-    server.transport._set_last_read_id("stream:temp", "0-0")
+    server.transport.set_last_read_id("stream:acc_cnt", "0-0")
+    server.transport.set_last_read_id("stream:temp", "0-0")
     # anchor + drain entry 0 on each stream
     assert server.metadata_stream.drain() == {
         "stream:acc_cnt": [0],

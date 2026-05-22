@@ -6,6 +6,7 @@ from .metadata import (
     MetadataWriter,
     entry_id_to_unix,
 )
+from .single_stream import SingleStreamReader, SingleStreamWriter
 from .status import StatusReader, StatusWriter
 from .transport import Transport
 
@@ -16,6 +17,8 @@ __all__ = [
     "MetadataSnapshotReader",
     "MetadataStreamReader",
     "MetadataWriter",
+    "SingleStreamReader",
+    "SingleStreamWriter",
     "StatusReader",
     "StatusWriter",
     "Transport",

@@ -289,7 +289,7 @@ class MetadataStreamReader:
             for eid, d in dat:
                 value = json.loads(d[b"value"])
                 entries.append((eid, value) if with_ids else value)
-                self.transport._set_last_read_id(stream, eid)
+                self.transport.set_last_read_id(stream, eid)
             out[stream] = entries
         silent = [s for s in streams if s not in out]
         if silent:
@@ -315,7 +315,7 @@ class MetadataStreamReader:
         that would smear stale sensor readings into a fresh
         integration window. Streams that don't exist in Redis yet
         fall back to ``"$"``, matching the same behavior
-        ``Transport._get_last_read_id`` already uses for unknown
+        ``Transport.get_last_read_id`` already uses for unknown
         streams.
         """
         if stream_keys is None:
@@ -336,7 +336,7 @@ class MetadataStreamReader:
                 # (Caching "$" here would freeze the pointer at a
                 # value that never matches actual entries.)
                 continue
-            self.transport._set_last_read_id(stream, tail)
+            self.transport.set_last_read_id(stream, tail)
             advanced += 1
         logger.info(
             "skip_to_latest: advanced %d metadata stream(s) to tail",

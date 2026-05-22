@@ -52,21 +52,34 @@ class Transport:
             raise
         return r
 
-    def _get_last_read_id(self, stream):
+    def get_last_read_id(self, stream):
+        """
+        Return the cached last-read entry ID for ``stream``.
+
+        Public extension point for per-bus ``SingleStreamReader``
+        subclasses (and any external consumer that needs to drive
+        cursor bookkeeping by hand). Returns ``"$"`` for streams that
+        don't exist yet — a per-call XREAD sentinel meaning "tail at
+        call time" — without caching it, so the next call re-checks
+        instead of freezing the cursor at a non-existent ID.
+        """
         with self._stream_lock:
             if stream in self._last_read_ids:
                 return self._last_read_ids[stream]
             try:
                 last_id = self.r.xinfo_stream(stream)["last-generated-id"]
             except redis.exceptions.ResponseError:
-                # Stream doesn't exist yet; "$" is a per-call xread
-                # sentinel ("tail at call time"), not a stable ID, so
-                # leave the cache empty until a real ID materializes.
                 return "$"
             self._last_read_ids[stream] = last_id
             return last_id
 
-    def _set_last_read_id(self, stream, read_id):
+    def set_last_read_id(self, stream, read_id):
+        """Cache ``read_id`` as the last-read entry ID for ``stream``.
+
+        Public extension point for per-bus ``SingleStreamReader``
+        subclasses — call after every successful ``xread`` to advance
+        the cursor.
+        """
         with self._stream_lock:
             self._last_read_ids[stream] = read_id
 
@@ -87,7 +100,7 @@ class Transport:
                 try:
                     last_id = self.r.xinfo_stream(key)["last-generated-id"]
                 except redis.exceptions.ResponseError:
-                    # See _get_last_read_id: "$" is a sentinel, not a
+                    # See get_last_read_id: "$" is a sentinel, not a
                     # cacheable ID — leave the cache empty.
                     d[key] = "$"
                     continue
