@@ -2,9 +2,24 @@ import json
 import logging
 import time
 
+import redis.exceptions
+
 from .keys import DATA_STREAMS_SET, METADATA_HASH, METADATA_STREAMS_SET
 
 logger = logging.getLogger(__name__)
+
+
+def entry_id_to_unix(entry_id):
+    """Convert a Redis stream entry ID to Unix seconds.
+
+    Redis stream entry IDs are ``{millis}-{seq}``; this drops the
+    sequence and returns ``millis / 1000`` as a ``float``. Accepts
+    either ``bytes`` (as returned by ``xread``) or ``str``.
+    """
+    if isinstance(entry_id, bytes):
+        entry_id = entry_id.decode()
+    millis = int(entry_id.split("-", 1)[0])
+    return millis / 1000.0
 
 
 class MetadataWriter:
@@ -225,7 +240,7 @@ class MetadataStreamReader:
         """``{stream_name: last_read_id}`` over registered metadata streams."""
         return self.transport._streams_from_set(METADATA_STREAMS_SET)
 
-    def drain(self, stream_keys=None):
+    def drain(self, stream_keys=None, with_ids=False):
         """
         Drain metadata streams since the last call.
 
@@ -235,13 +250,19 @@ class MetadataStreamReader:
             If ``None``, drain every registered metadata stream. If
             given, drain only the listed streams (skipping any that
             aren't registered).
+        with_ids : bool
+            If ``False`` (default), return only deserialized values.
+            If ``True``, return ``(entry_id_bytes, value)`` tuples so
+            callers that need the stream entry ID (e.g. for an
+            ``_ts_unix`` HDF5 column via :func:`entry_id_to_unix`)
+            don't have to bypass this method.
 
         Returns
         -------
         dict
-            ``{stream_name: [value, ...]}`` for each stream that had
-            entries since the last call. Streams with no new entries
-            are omitted.
+            ``{stream_name: [value, ...]}`` or, with ``with_ids=True``,
+            ``{stream_name: [(entry_id_bytes, value), ...]}``. Streams
+            with no new entries are omitted.
         """
         if stream_keys is None:
             streams = self.streams
@@ -264,15 +285,63 @@ class MetadataStreamReader:
         resp = self.transport.r.xread(streams)
         for stream, dat in resp:
             stream = stream.decode()
-            values = []
+            entries = []
             for eid, d in dat:
-                values.append(json.loads(d[b"value"]))
+                value = json.loads(d[b"value"])
+                entries.append((eid, value) if with_ids else value)
                 self.transport._set_last_read_id(stream, eid)
-            out[stream] = values
+            out[stream] = entries
         silent = [s for s in streams if s not in out]
         if silent:
             self._warn_if_silent_stale(silent)
         return out
+
+    def skip_to_latest(self, stream_keys=None):
+        """
+        Advance the per-stream read position to each stream's current
+        tail, so the next :meth:`drain` returns only entries written
+        after this call.
+
+        Parameters
+        ----------
+        stream_keys : str or list of str or None
+            If ``None``, advance every stream registered in
+            ``METADATA_STREAMS_SET``. If given, advance only the
+            listed streams.
+
+        Notes
+        -----
+        Use this after a transport outage to avoid replaying backlog
+        that would smear stale sensor readings into a fresh
+        integration window. Streams that don't exist in Redis yet
+        fall back to ``"$"``, matching the same behavior
+        ``Transport._get_last_read_id`` already uses for unknown
+        streams.
+        """
+        if stream_keys is None:
+            members = self.transport.r.smembers(METADATA_STREAMS_SET)
+            stream_keys = [m.decode() for m in members]
+        elif isinstance(stream_keys, str):
+            stream_keys = [stream_keys]
+        r = self.transport.r
+        advanced = 0
+        for stream in stream_keys:
+            try:
+                tail = r.xinfo_stream(stream)["last-generated-id"]
+            except redis.exceptions.ResponseError:
+                # Stream doesn't exist yet — nothing to skip past.
+                # Leave _last_read_ids untouched so the next drain
+                # follows the standard "skip backlog on first
+                # encounter" fallback once the producer creates it.
+                # (Caching "$" here would freeze the pointer at a
+                # value that never matches actual entries.)
+                continue
+            self.transport._set_last_read_id(stream, tail)
+            advanced += 1
+        logger.info(
+            "skip_to_latest: advanced %d metadata stream(s) to tail",
+            advanced,
+        )
 
     def _warn_if_silent_stale(self, silent_streams):
         """For each registered stream that returned no entries this
