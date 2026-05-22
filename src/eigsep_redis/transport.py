@@ -21,27 +21,62 @@ class Transport:
     for testing).
     """
 
-    def __init__(self, host="localhost", port=6379, connect_timeout=5.0):
+    def __init__(
+        self,
+        host="localhost",
+        port=6379,
+        connect_timeout=5.0,
+        lazy=False,
+    ):
+        """Construct a Transport.
+
+        Parameters
+        ----------
+        host, port : str, int
+            Redis server address.
+        connect_timeout : float
+            ``socket_connect_timeout`` for the underlying ``redis.Redis``
+            client. Bounds how long the eager ping (when ``lazy=False``)
+            and any reconnect attempt will block before raising.
+        lazy : bool
+            If ``False`` (default), ping the server during ``__init__``
+            and raise ``redis.exceptions.ConnectionError`` if the server
+            is unreachable — the original fail-fast behavior. If
+            ``True``, build the client but skip the ping; construction
+            always succeeds, and connection failures surface at the
+            first read/write instead. Use ``lazy=True`` when the
+            transport is for an opportunistic peer that may be offline
+            at startup but should be picked up implicitly once it
+            recovers (e.g. the LattePanda from
+            ``eigsep_observing.scripts.observe``). Callers that need an
+            explicit health check can use :meth:`is_connected`.
+        """
         self.logger = logger
         self.host = host
         self.port = port
         self.connect_timeout = connect_timeout
+        self.lazy = lazy
         self._stream_lock = threading.RLock()
         self._last_read_ids = {}
         self.r = self._make_redis(host, port)
 
     def _make_redis(self, host, port):
-        try:
-            r = redis.Redis(
-                host=host,
-                port=port,
-                decode_responses=False,
-                socket_timeout=None,
-                socket_connect_timeout=self.connect_timeout,
-                retry_on_timeout=False,
+        r = redis.Redis(
+            host=host,
+            port=port,
+            decode_responses=False,
+            socket_timeout=None,
+            socket_connect_timeout=self.connect_timeout,
+            retry_on_timeout=False,
+        )
+        if self.lazy:
+            self.logger.info(
+                f"Built lazy Redis client for {host}:{port} "
+                "(no startup ping; failures surface at first use)."
             )
+            return r
+        try:
             r.ping()
-            self.logger.info(f"Connected to Redis at {host}:{port}")
         except redis.exceptions.ConnectionError as e:
             self.logger.error(
                 f"Failed to connect to Redis at {host}:{port}: {e}"
@@ -50,6 +85,7 @@ class Transport:
         except Exception as e:
             self.logger.error(f"Unexpected error connecting to Redis: {e}")
             raise
+        self.logger.info(f"Connected to Redis at {host}:{port}")
         return r
 
     def _get_last_read_id(self, stream):

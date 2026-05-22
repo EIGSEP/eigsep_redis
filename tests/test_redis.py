@@ -352,6 +352,92 @@ def test_transport_passes_connect_timeout_to_redis(monkeypatch):
     assert captured["socket_timeout"] is None
 
 
+def test_transport_eager_default_pings(monkeypatch):
+    """Default ``lazy=False`` Transport calls ``ping()`` during ``__init__``
+    and raises ``ConnectionError`` on an unreachable server — the
+    backwards-compatible fail-fast contract that every existing consumer
+    (picohost, eigsep_observing, etc.) depends on.
+    """
+    import redis.exceptions
+
+    from eigsep_redis.transport import Transport
+
+    pings = []
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def ping(self):
+            pings.append(True)
+            raise redis.exceptions.ConnectionError("nope")
+
+    monkeypatch.setattr("eigsep_redis.transport.redis.Redis", _FakeClient)
+
+    with pytest.raises(redis.exceptions.ConnectionError):
+        Transport(host="example.invalid", port=6379)
+
+    assert pings == [True]
+
+
+def test_transport_lazy_skips_ping(monkeypatch):
+    """``lazy=True`` Transport must not ping during ``__init__`` so it
+    succeeds against an unreachable server. The lazy mode exists for the
+    opportunistic-peer pattern in ``eigsep_observing.scripts.observe``:
+    construction always succeeds and connection failures surface at the
+    first read/write instead.
+    """
+    from eigsep_redis.transport import Transport
+
+    pings = []
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def ping(self):
+            # Intentionally count — we assert the lazy path never
+            # reaches here at construction time.
+            pings.append(True)
+            return True
+
+    monkeypatch.setattr("eigsep_redis.transport.redis.Redis", _FakeClient)
+
+    t = Transport(host="example.invalid", port=6379, lazy=True)
+
+    assert pings == []
+    assert t.lazy is True
+
+
+def test_transport_lazy_is_connected_uses_ping(monkeypatch):
+    """``is_connected()`` is the explicit health check for lazy callers:
+    a single ping that returns ``True``/``False`` instead of raising.
+    Pairs with ``lazy=True`` to give consumers an opt-in probe before
+    issuing a real read.
+    """
+    import redis.exceptions
+
+    from eigsep_redis.transport import Transport
+
+    state = {"alive": False}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def ping(self):
+            if not state["alive"]:
+                raise redis.exceptions.ConnectionError("nope")
+            return True
+
+    monkeypatch.setattr("eigsep_redis.transport.redis.Redis", _FakeClient)
+
+    t = Transport(host="example.invalid", port=6379, lazy=True)
+    assert t.is_connected() is False
+    state["alive"] = True
+    assert t.is_connected() is True
+
+
 def test_metadata_writer_has_no_cross_bus_methods():
     """Structural guard: the metadata writer surface must not expose any
     method or attribute that could be used to write a corr or VNA payload.
