@@ -23,6 +23,7 @@ from eigsep_redis import (
     MetadataWriter,
     StatusReader,
     StatusWriter,
+    entry_id_to_unix,
 )
 from eigsep_redis.keys import METADATA_HASH
 from eigsep_redis.testing import DummyTransport
@@ -384,7 +385,13 @@ def test_metadata_readers_have_no_cross_bus_methods():
         (MetadataSnapshotReader, {"get", "max_age_s"}),
         (
             MetadataStreamReader,
-            {"drain", "streams", "max_age_s", "warn_interval_s"},
+            {
+                "drain",
+                "skip_to_latest",
+                "streams",
+                "max_age_s",
+                "warn_interval_s",
+            },
         ),
     ):
         public = {name for name in vars(cls) if not name.startswith("_")}
@@ -556,3 +563,111 @@ def test_status(server, client):
     client.status.send("VNA_TIMEOUT")
     level, status = server.status_reader.read()
     assert status == "VNA_TIMEOUT"
+
+
+def test_entry_id_to_unix_bytes_and_str():
+    """Redis stream entry IDs are ``{millis}-{seq}``; helper drops the
+    sequence and returns Unix seconds as a float. Accepts both bytes
+    (xread's return shape) and str."""
+    assert entry_id_to_unix(b"1700000000000-0") == 1.7e9
+    assert entry_id_to_unix("1700000000000-7") == 1.7e9
+    # sub-second resolution is preserved
+    assert entry_id_to_unix(b"1700000000123-0") == pytest.approx(
+        1.700000000123e9
+    )
+
+
+def test_metadata_drain_with_ids_returns_tuples(server, client):
+    """drain(with_ids=True) returns (entry_id, value) tuples and
+    advances the read pointer exactly like the default shape, so the
+    next call returns empty until new entries arrive."""
+    # Register the stream, then anchor the reader at the start of the
+    # stream so the backlog-skip default doesn't hide the entries
+    # under test. (Mirrors how the corr-loop side ends up positioned
+    # once it has consumed at least one entry.)
+    client.metadata.add("acc_cnt", 0)
+    server.transport._set_last_read_id("stream:acc_cnt", "0-0")
+    client.metadata.add("acc_cnt", 1)
+
+    result = server.metadata_stream.drain(with_ids=True)
+    assert set(result.keys()) == {"stream:acc_cnt"}
+    entries = result["stream:acc_cnt"]
+    assert len(entries) == 2
+    for eid, value in entries:
+        assert isinstance(eid, bytes)
+        # entry IDs parse as Unix seconds matching wall clock
+        assert abs(entry_id_to_unix(eid) - time.time()) < 5.0
+    assert [v for _, v in entries] == [0, 1]
+
+    # pointer advanced — next drain is empty until new entries arrive
+    assert server.metadata_stream.drain(with_ids=True) == {}
+
+    client.metadata.add("acc_cnt", 2)
+    follow = server.metadata_stream.drain(with_ids=True)
+    assert [v for _, v in follow["stream:acc_cnt"]] == [2]
+
+
+def test_metadata_skip_to_latest_advances_past_backlog(server, client):
+    """Consumer that has been reading a stream calls skip_to_latest
+    after a hypothetical transport blip — pending unread entries are
+    discarded, and only entries produced after the skip are returned."""
+    # Anchor the reader at the start so we can verify entry 0 is
+    # consumed normally before the simulated blip.
+    client.metadata.add("acc_cnt", 0)
+    server.transport._set_last_read_id("stream:acc_cnt", "0-0")
+    assert server.metadata_stream.drain() == {"stream:acc_cnt": [0]}
+
+    # producer keeps publishing during the simulated outage
+    for i in range(1, 4):
+        client.metadata.add("acc_cnt", i)
+
+    server.metadata_stream.skip_to_latest("stream:acc_cnt")
+
+    # entries 1..3 are discarded; only post-skip entries surface
+    client.metadata.add("acc_cnt", 99)
+    assert server.metadata_stream.drain() == {"stream:acc_cnt": [99]}
+
+
+def test_metadata_skip_to_latest_defaults_to_registered_streams(
+    server, client
+):
+    """With no argument, skip_to_latest walks METADATA_STREAMS_SET and
+    advances every registered stream."""
+    client.metadata.add("acc_cnt", 0)
+    client.metadata.add("temp", 25.0)
+    server.transport._set_last_read_id("stream:acc_cnt", "0-0")
+    server.transport._set_last_read_id("stream:temp", "0-0")
+    # anchor + drain entry 0 on each stream
+    assert server.metadata_stream.drain() == {
+        "stream:acc_cnt": [0],
+        "stream:temp": [25.0],
+    }
+
+    # backlog on both streams
+    for i in range(1, 3):
+        client.metadata.add("acc_cnt", i)
+        client.metadata.add("temp", 25.0 + i)
+
+    server.metadata_stream.skip_to_latest()
+
+    client.metadata.add("acc_cnt", 99)
+    client.metadata.add("temp", 100.0)
+    drained = server.metadata_stream.drain()
+    assert drained == {
+        "stream:acc_cnt": [99],
+        "stream:temp": [100.0],
+    }
+
+
+def test_metadata_skip_to_latest_unknown_stream_is_noop(server, client):
+    """Calling skip_to_latest on a stream that doesn't exist yet is a
+    no-op: it must not raise, and must not cache ``$`` (or any other
+    value) in ``_last_read_ids``. Caching ``$`` would freeze the
+    pointer at a value that never matches a real entry; leaving
+    ``_last_read_ids`` untouched lets the standard fallback path take
+    over once the producer creates the stream."""
+    server.metadata_stream.skip_to_latest("stream:not_yet")
+    assert "stream:not_yet" not in server.transport._last_read_ids
+    # And it doesn't crash when none of the requested streams exist
+    server.metadata_stream.skip_to_latest(["stream:a", "stream:b", "stream:c"])
+    assert server.transport._last_read_ids == {}
