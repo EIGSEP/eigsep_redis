@@ -486,6 +486,24 @@ def test_metadata_drain_skips_producer_backlog(server, client):
     assert server.metadata_stream.drain() == {}
 
 
+def test_metadata_drain_catches_entries_after_first_drain(server, client):
+    """Regression for issue #13: the first drain on a fresh cache
+    skips backlog (documented behavior), but every subsequent drain
+    must capture entries the producer publishes between drains —
+    without requiring an explicit ``skip_to_latest()`` first.
+
+    Before the fix, ``_streams_from_set`` resolved the cursor via
+    ``xinfo_stream`` but never wrote it back into ``_last_read_ids``,
+    so each drain re-seeked to the current tail and entries published
+    between drains were lost.
+    """
+    client.metadata.add("acc_cnt", 1)
+    assert server.metadata_stream.drain() == {}  # backlog skipped
+    client.metadata.add("acc_cnt", 2)
+    client.metadata.add("acc_cnt", 3)
+    assert server.metadata_stream.drain() == {"stream:acc_cnt": [2, 3]}
+
+
 def test_is_alive(server, client):
     assert server.heartbeat_reader.check() is False
     client.heartbeat.set(ex=1, alive=True)
@@ -563,6 +581,23 @@ def test_status(server, client):
     client.status.send("VNA_TIMEOUT")
     level, status = server.status_reader.read()
     assert status == "VNA_TIMEOUT"
+
+
+def test_status_read_catches_entries_after_empty_read(server, client):
+    """Regression for the symmetric cursor-cache bug in
+    ``Transport._get_last_read_id``: an empty (timeout) read on a
+    stream that already has entries must seed the cursor, so the next
+    read picks up entries the producer publishes between calls
+    instead of re-seeking to the new tail and dropping them.
+    """
+    client.status.send("backlog")
+    # Short timeout — backlog skipped by design, no new entries arrive
+    # during the block window, so read returns (None, None).
+    level, status = server.status_reader.read(timeout=0.05)
+    assert (level, status) == (None, None)
+    client.status.send("fresh")
+    level, status = server.status_reader.read(timeout=0.05)
+    assert status == "fresh"
 
 
 def test_entry_id_to_unix_bytes_and_str():
