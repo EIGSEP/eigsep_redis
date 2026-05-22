@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.1.1...v2.2.0) (2026-05-22)
+
+
+### Features
+
+* **metadata:** add skip_to_latest, with_ids drain, entry_id_to_unix ([266777d](https://github.com/EIGSEP/eigsep_redis/commit/266777dae4c0c977fbd558881e5765220c5087b1))
+
 ## [2.1.1](https://github.com/EIGSEP/eigsep_redis/compare/v2.1.0...v2.1.1) (2026-04-27)
 
 
