@@ -61,23 +61,22 @@ class Transport:
         self.r = self._make_redis(host, port)
 
     def _make_redis(self, host, port):
-        try:
-            r = redis.Redis(
-                host=host,
-                port=port,
-                decode_responses=False,
-                socket_timeout=None,
-                socket_connect_timeout=self.connect_timeout,
-                retry_on_timeout=False,
+        r = redis.Redis(
+            host=host,
+            port=port,
+            decode_responses=False,
+            socket_timeout=None,
+            socket_connect_timeout=self.connect_timeout,
+            retry_on_timeout=False,
+        )
+        if self.lazy:
+            self.logger.info(
+                f"Built lazy Redis client for {host}:{port} "
+                "(no startup ping; failures surface at first use)."
             )
-            if self.lazy:
-                self.logger.info(
-                    f"Built lazy Redis client for {host}:{port} "
-                    "(no startup ping; failures surface at first use)."
-                )
-            else:
-                r.ping()
-                self.logger.info(f"Connected to Redis at {host}:{port}")
+            return r
+        try:
+            r.ping()
         except redis.exceptions.ConnectionError as e:
             self.logger.error(
                 f"Failed to connect to Redis at {host}:{port}: {e}"
@@ -86,6 +85,7 @@ class Transport:
         except Exception as e:
             self.logger.error(f"Unexpected error connecting to Redis: {e}")
             raise
+        self.logger.info(f"Connected to Redis at {host}:{port}")
         return r
 
     def _get_last_read_id(self, stream):
