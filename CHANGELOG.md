@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.2.1...v2.3.0) (2026-05-22)
+
+
+### Features
+
+* **transport:** add lazy mode to skip startup ping ([#17](https://github.com/EIGSEP/eigsep_redis/issues/17)) ([273e1e3](https://github.com/EIGSEP/eigsep_redis/commit/273e1e31bd1cdc9131c3fe7f6e1cf726eace65b0))
+* **transport:** public single-stream reader/writer base classes ([60a224c](https://github.com/EIGSEP/eigsep_redis/commit/60a224c76a695cd2e65636b9b398780d68bc5a48))
+
 ## [2.2.1](https://github.com/EIGSEP/eigsep_redis/compare/v2.2.0...v2.2.1) (2026-05-22)
 
 
