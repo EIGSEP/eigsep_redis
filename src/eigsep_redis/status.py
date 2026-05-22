@@ -1,11 +1,12 @@
 import logging
 
 from .keys import STATUS_STREAM
+from .single_stream import SingleStreamReader, SingleStreamWriter
 
 logger = logging.getLogger(__name__)
 
 
-class StatusWriter:
+class StatusWriter(SingleStreamWriter):
     """
     Publish status messages onto the status stream.
 
@@ -17,10 +18,13 @@ class StatusWriter:
     of every event remains the panda's rotating log file.
     """
 
+    stream = STATUS_STREAM
+    # Status is a singleton with no registry-set; nothing to SADD.
+    data_set = None
     maxlen = 100
 
-    def __init__(self, transport):
-        self.transport = transport
+    def _encode(self, status, level=logging.INFO):
+        return {"level": level, "status": status}
 
     def send(self, status, level=logging.INFO):
         """
@@ -33,14 +37,10 @@ class StatusWriter:
         level : int
             Python logging level.
         """
-        self.transport.r.xadd(
-            STATUS_STREAM,
-            {"level": level, "status": status},
-            maxlen=self.maxlen,
-        )
+        self.publish(status, level=level)
 
 
-class StatusReader:
+class StatusReader(SingleStreamReader):
     """
     Consume status messages from the status stream.
 
@@ -49,36 +49,19 @@ class StatusReader:
     hard-coded in :data:`STATUS_STREAM`).
     """
 
-    def __init__(self, transport):
-        self.transport = transport
+    stream = STATUS_STREAM
+    # Status is a singleton with no registry-set; skip the
+    # membership check that other buses use.
+    data_set = None
 
-    @property
-    def stream(self):
-        """``{STATUS_STREAM: last_read_id}`` — view, used for blocking reads."""
-        return {STATUS_STREAM: self.transport._get_last_read_id(STATUS_STREAM)}
+    def _timeout_value(self):
+        """Status read returns ``(None, None)`` on timeout instead of
+        raising so the consumer loop can poll without try/except."""
+        return None, None
 
-    def read(self, timeout=None):
-        """
-        Blocking read of the next status message.
-
-        Parameters
-        ----------
-        timeout : float or None
-            Timeout in seconds. ``None`` blocks indefinitely.
-
-        Returns
-        -------
-        (level, status) : tuple
-            ``(int, str)`` on success, ``(None, None)`` on timeout.
-        """
-        block_time = 0 if timeout is None else int(timeout * 1000)
-        msg = self.transport.r.xread(self.stream, count=1, block=block_time)
-        if not msg:
-            return None, None
-        entry_id, status_dict = msg[0][1][0]
-        self.transport._set_last_read_id(STATUS_STREAM, entry_id)
-        status = status_dict.get(b"status").decode("utf-8")
-        raw_level = status_dict.get(b"level")
+    def _decode(self, entry_id, fields):
+        status = fields.get(b"status").decode("utf-8")
+        raw_level = fields.get(b"level")
         if raw_level is None:
             level = logging.INFO
         else:
