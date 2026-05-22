@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/EIGSEP/eigsep_redis/compare/v2.2.0...v2.2.1) (2026-05-22)
+
+
+### Bug Fixes
+
+* **transport:** cache xinfo-resolved cursor so drain advances forward ([b85d6c2](https://github.com/EIGSEP/eigsep_redis/commit/b85d6c2aee4bba9362b902ff55c556c46375495f))
+
 ## [2.2.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.1.1...v2.2.0) (2026-05-22)
 
 
