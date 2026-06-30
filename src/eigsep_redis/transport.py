@@ -67,7 +67,9 @@ class Transport:
             decode_responses=False,
             socket_timeout=None,
             socket_connect_timeout=self.connect_timeout,
-            retry_on_timeout=False,
+            # retry_on_timeout omitted: deprecated in redis-py 6.0, and the
+            # default (retries=0) already fails fast on timeout — which is
+            # exactly what retry_on_timeout=False used to request.
         )
         if self.lazy:
             self.logger.info(
