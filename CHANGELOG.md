@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/EIGSEP/eigsep_redis/compare/v2.3.0...v2.3.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **transport:** drop deprecated redis-py retry_on_timeout kwarg ([dadb082](https://github.com/EIGSEP/eigsep_redis/commit/dadb082a267b7fdc9519e14b9bea1020af6c71ae))
+
 ## [2.3.0](https://github.com/EIGSEP/eigsep_redis/compare/v2.2.1...v2.3.0) (2026-05-22)
 
 
