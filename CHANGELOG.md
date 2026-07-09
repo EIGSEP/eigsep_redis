@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.2](https://github.com/EIGSEP/eigsep_redis/compare/v2.3.1...v2.3.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **transport:** deliver first entry published after an absent-stream poll ([526da80](https://github.com/EIGSEP/eigsep_redis/commit/526da80692985ceafe73e475d9d4585b2d80570e))
+* **transport:** enable TCP keepalive to bound half-open-peer hangs ([5ad352d](https://github.com/EIGSEP/eigsep_redis/commit/5ad352d307e86126e112257e261bf45f07764c30)), closes [#23](https://github.com/EIGSEP/eigsep_redis/issues/23)
+
 ## [2.3.1](https://github.com/EIGSEP/eigsep_redis/compare/v2.3.0...v2.3.1) (2026-07-01)
 
 
