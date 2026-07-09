@@ -9,6 +9,7 @@ upgraded.
 
 import json
 import logging
+import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -806,3 +807,30 @@ def test_metadata_skip_to_latest_unknown_stream_is_noop(server, client):
     # And it doesn't crash when none of the requested streams exist
     server.metadata_stream.skip_to_latest(["stream:a", "stream:b", "stream:c"])
     assert server.transport._last_read_ids == {}
+
+
+def test_transport_sets_tcp_keepalive():
+    """Issue #23: a peer that power-cuts mid-conversation leaves a
+    half-open TCP connection; with socket_timeout=None (deliberate —
+    finite timeouts break block=0 XREADs) an in-flight recv() blocks
+    forever. Kernel TCP keepalive is the guard: assert the options
+    land on the connection pool. 192.0.2.1 is TEST-NET (never
+    routable); lazy=True skips the startup ping so no connection is
+    attempted.
+    """
+    from eigsep_redis.transport import Transport
+
+    t = Transport(host="192.0.2.1", port=6379, lazy=True)
+    kwargs = t.r.connection_pool.connection_kwargs
+    assert kwargs["socket_keepalive"] is True
+    expected = {
+        getattr(socket, name): val
+        for name, val in (
+            ("TCP_KEEPIDLE", 30),
+            ("TCP_KEEPINTVL", 10),
+            ("TCP_KEEPCNT", 3),
+        )
+        if hasattr(socket, name)
+    }
+    assert expected, "platform exposes no TCP keepalive constants"
+    assert kwargs["socket_keepalive_options"] == expected
