@@ -122,6 +122,27 @@ def test_reader_no_check_when_data_set_is_none(server, client):
     assert reader.read(timeout=0.1) == 7
 
 
+def test_first_entry_after_absent_poll_is_delivered(server, client):
+    """Regression for the fresh-stream first-entry swallow: a reader
+    that polled while the stream was absent must receive the entry
+    whose publish created and registered the stream, instead of
+    lazily initializing its cursor at that entry's id and skipping
+    it.
+
+    Field case (2026-07-09): live_status polled ``stream:vna`` on a
+    fresh post-reboot Redis; the first VNA bundle registered the
+    stream and was silently swallowed, the second one painted. At
+    ~1/hour cadence that loses a real measurement, not a tick.
+    """
+    reader = ToyReader(server)
+    # consumer polls before any producer has ever written
+    assert reader.read(timeout=0.05) is None
+    # producer's first-ever publish creates + registers the stream
+    ToyWriter(client).publish(42)
+    # the next poll must deliver that first entry, not skip it
+    assert reader.read(timeout=0.1) == 42
+
+
 def test_reader_timeout_default_raises(server, client):
     """Default _timeout_value raises TimeoutError — what corr/vna/adc want."""
     ToyWriter(client).publish(1)  # registers in data_set

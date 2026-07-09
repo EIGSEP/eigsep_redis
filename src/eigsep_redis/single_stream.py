@@ -68,6 +68,13 @@ class SingleStreamReader:
         ):
             if self.absent_warning:
                 self.transport.logger.warning(self.absent_warning)
+            # A stream observed absent has no backlog to skip: pin the
+            # cursor to "0" so the entry whose publish creates and
+            # registers the stream is delivered on the next read,
+            # instead of being swallowed by get_last_read_id's lazy
+            # last-generated-id initialization. Skip-to-latest for
+            # streams that already exist at first read is unchanged.
+            self.transport.set_last_read_id(self.stream, "0")
             return self._absent_sentinel()
         last_id = self.transport.get_last_read_id(self.stream)
         block_ms = 0 if timeout is None else int(timeout * 1000)
