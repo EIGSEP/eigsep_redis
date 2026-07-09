@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 import threading
 import time
 
@@ -7,6 +8,25 @@ import redis
 import redis.exceptions
 
 logger = logging.getLogger(__name__)
+
+# Kernel-level dead-peer detection for half-open connections
+# (EIGSEP/eigsep_redis#23). A peer that loses power mid-conversation
+# never sends FIN/RST, so an in-flight recv() blocks forever —
+# socket_timeout must stay None (finite values break block=0 XREADs;
+# see f40c79c), which leaves TCP keepalive as the guard. With these
+# values a vanished peer surfaces as ConnectionError in
+# ~idle + intvl * cnt = 60 s. Built with getattr so non-Linux
+# platforms (macOS lacks TCP_KEEPIDLE) simply omit what they don't
+# have; socket_keepalive=True alone still enables OS defaults there.
+TCP_KEEPALIVE_OPTIONS = {
+    getattr(socket, _name): _val
+    for _name, _val in (
+        ("TCP_KEEPIDLE", 30),
+        ("TCP_KEEPINTVL", 10),
+        ("TCP_KEEPCNT", 3),
+    )
+    if hasattr(socket, _name)
+}
 
 
 class Transport:
@@ -67,6 +87,8 @@ class Transport:
             decode_responses=False,
             socket_timeout=None,
             socket_connect_timeout=self.connect_timeout,
+            socket_keepalive=True,
+            socket_keepalive_options=TCP_KEEPALIVE_OPTIONS,
             # retry_on_timeout omitted: deprecated in redis-py 6.0, and the
             # default (retries=0) already fails fast on timeout — which is
             # exactly what retry_on_timeout=False used to request.
